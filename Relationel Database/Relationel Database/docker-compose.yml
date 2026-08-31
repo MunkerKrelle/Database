@@ -20,7 +20,6 @@ services:
       - postgres
     environment:
       CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=postgres;Password=yourpassword"
-    command: ["dotnet", "RelationelDatabase.dll"]
 
 volumes:
   pgdata:

@@ -11,4 +11,4 @@ FROM mcr.microsoft.com/dotnet/runtime:8.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 
-ENTRYPOINT ["dotnet", "RelationelDatabase.dll"]
+ENTRYPOINT ["dotnet", "Relationel Database.dll"]
