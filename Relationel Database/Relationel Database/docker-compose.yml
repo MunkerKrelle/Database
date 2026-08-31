@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres_local
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_DB: inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: relationeldatabase_app
+    depends_on:
+      - postgres
+    environment:
+      CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=postgres;Password=yourpassword"
+    command: ["dotnet", "RelationelDatabase.dll"]
+
+volumes:
+  pgdata:

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Relationel Database": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
