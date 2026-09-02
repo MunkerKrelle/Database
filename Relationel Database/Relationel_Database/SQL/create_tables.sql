@@ -1,0 +1,16 @@
+CREATE TABLE Players (
+    PlayerID SERIAL PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE Items (
+    ItemID SERIAL PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE Inventory (
+    InventoryID SERIAL PRIMARY KEY,
+    PlayerID INT NOT NULL REFERENCES Players(PlayerID),
+    ItemID INT NOT NULL REFERENCES Items(ItemID),
+    Quantity INT NOT NULL DEFAULT 1
+);

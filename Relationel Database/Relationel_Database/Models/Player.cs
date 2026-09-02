@@ -1,4 +1,4 @@
-﻿namespace RelationelDatabase.Models;
+﻿namespace Relationel_Database.Models;
 
 public class Player
 {
