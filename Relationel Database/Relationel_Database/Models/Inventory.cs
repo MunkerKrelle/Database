@@ -2,14 +2,15 @@
 
 public class Inventory
 {
-    public int InventoryID { get; set; }
+    public int CharacterID { get; set; }
+    public Character? Character { get; set; }
 
-    public int PlayerID { get; set; }
-    public required Player Player { get; set; }
-
+    public int SlotNo { get; set; }
     public int ItemID { get; set; }
-    public required Item Item { get; set; }
+    public Item? Item { get; set; }
 
-    public int Quantity { get; set; }
+    public int Amount { get; set; }
+    public int Location { get; set; }
 }
+
 
