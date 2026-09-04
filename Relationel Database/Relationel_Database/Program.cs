@@ -9,35 +9,6 @@ try
 {
     using var db = new AppDbContext();
 
-    void DumpEntity(Type t)
-    {
-        Console.WriteLine($"ENTITY: {t.Name}");
-        var et = db.Model.FindEntityType(t);
-
-        if (et == null)
-        {
-            Console.WriteLine("  NOT FOUND IN EF MODEL");
-            return;
-        }
-
-        Console.WriteLine("  PK:");
-        foreach (var key in et.GetKeys())
-            Console.WriteLine("    " + string.Join(", ", key.Properties.Select(p => p.Name)));
-
-        Console.WriteLine("  PROPERTIES:");
-        foreach (var prop in et.GetProperties())
-            Console.WriteLine("    " + prop.Name);
-
-        Console.WriteLine("  FKs:");
-        foreach (var fk in et.GetForeignKeys())
-            Console.WriteLine("    " + string.Join(", ", fk.Properties.Select(p => p.Name)) + " -> " + fk.PrincipalEntityType.Name);
-    }
-
-    DumpEntity(typeof(CharacterQuest));
-    DumpEntity(typeof(CharacterMount));
-    DumpEntity(typeof(QuestReward));
-
-
     Console.WriteLine("Database connected: " + db.Database.CanConnect());
     Console.WriteLine("--------------------------------------------");
 

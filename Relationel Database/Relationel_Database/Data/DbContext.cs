@@ -35,127 +35,202 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // --- TABLE NAMES ---
-        modelBuilder.Entity<Character>().ToTable("character");
-        modelBuilder.Entity<Account>().ToTable("account");
-        modelBuilder.Entity<Realm>().ToTable("realm");
-        modelBuilder.Entity<Guild>().ToTable("guild");
-        modelBuilder.Entity<Item>().ToTable("item");
-        modelBuilder.Entity<Inventory>().ToTable("inventory");
-        modelBuilder.Entity<Mount>().ToTable("mount");
-        modelBuilder.Entity<Quest>().ToTable("quest");
-        modelBuilder.Entity<CharacterQuest>().ToTable("character_quest");
-        modelBuilder.Entity<CharacterMount>().ToTable("character_mount");
-        modelBuilder.Entity<QuestReward>().ToTable("quest_reward");
+        
+        // ACCOUNT
+        modelBuilder.Entity<Account>(e =>
+        {
+            e.ToTable("account");
+
+            e.HasKey(a => a.AccountID);
+            e.Property(a => a.AccountID).HasColumnName("account_id");
+            e.Property(a => a.Email).HasColumnName("email");
+            e.Property(a => a.Password).HasColumnName("password");
+
+            e.HasMany(a => a.Characters)
+             .WithOne(c => c.Account)
+             .HasForeignKey(c => c.AccountID);
+        });
+
+        
+        // REALM
+        modelBuilder.Entity<Realm>(e =>
+        {
+            e.ToTable("realm");
+
+            e.HasKey(r => r.RealmID);
+            e.Property(r => r.RealmID).HasColumnName("realm_id");
+            e.Property(r => r.RealmName).HasColumnName("realm_name");
+
+            e.HasMany(r => r.Characters)
+             .WithOne(c => c.Realm)
+             .HasForeignKey(c => c.RealmID);
+
+            e.HasMany(r => r.Guilds)
+             .WithOne(g => g.Realm)
+             .HasForeignKey(g => g.RealmID);
+        });
+
+        
+        // GUILD
+        modelBuilder.Entity<Guild>(e =>
+        {
+            e.ToTable("guild");
+
+            e.HasKey(g => g.GuildID);
+            e.Property(g => g.GuildID).HasColumnName("guild_id");
+            e.Property(g => g.GuildName).HasColumnName("guild_name");
+            e.Property(g => g.RealmID).HasColumnName("realm_id");
+
+            e.HasMany(g => g.Members)
+             .WithOne(c => c.Guild)
+             .HasForeignKey(c => c.GuildID);
+        });
+
+        
+        // MOUNT
+        modelBuilder.Entity<Mount>(e =>
+        {
+            e.ToTable("mount");
+
+            e.HasKey(m => m.MountID);
+            e.Property(m => m.MountID).HasColumnName("mount_id");
+            e.Property(m => m.MountName).HasColumnName("mount_name");
+            e.Property(m => m.Speed).HasColumnName("speed");
+            e.Property(m => m.IsFlying).HasColumnName("is_flying");
+        });
+
+        
+        // CHARACTER
+        modelBuilder.Entity<Character>(e =>
+        {
+            e.ToTable("character");
+
+            e.HasKey(c => c.CharId);
+            e.Property(c => c.CharId).HasColumnName("char_id");
+            e.Property(c => c.CharName).HasColumnName("char_name");
+            e.Property(c => c.Level).HasColumnName("level");
+            e.Property(c => c.Gold).HasColumnName("gold");
+
+            e.Property(c => c.AccountID).HasColumnName("account_id");
+            e.Property(c => c.RealmID).HasColumnName("realm_id");
+            e.Property(c => c.GuildID).HasColumnName("guild_id");
+            e.Property(c => c.RidingMountID).HasColumnName("riding_mount_id");
+
+            e.HasOne(c => c.RidingMount)
+             .WithOne()
+             .HasForeignKey<Character>(c => c.RidingMountID);
+        });
+
+        
+        // ITEM
+        
+        modelBuilder.Entity<Item>(e =>
+        {
+            e.ToTable("item");
+
+            e.HasKey(i => i.ItemID);
+            e.Property(i => i.ItemID).HasColumnName("item_id");
+            e.Property(i => i.ItemName).HasColumnName("item_name");
+            e.Property(i => i.Quality).HasColumnName("quality");
+            e.Property(i => i.ItemType).HasColumnName("item_type");
+        });
+
+        
+        // INVENTORY
+        modelBuilder.Entity<Inventory>(e =>
+        {
+            e.ToTable("inventory");
+
+            e.HasKey(i => new { i.CharacterID, i.SlotNo });
+
+            e.Property(i => i.CharacterID).HasColumnName("character_id");
+            e.Property(i => i.SlotNo).HasColumnName("slot_no");
+            e.Property(i => i.ItemID).HasColumnName("item_id");
+            e.Property(i => i.Amount).HasColumnName("amount");
+            e.Property(i => i.Location).HasColumnName("location");
+
+            e.HasOne(i => i.Character)
+             .WithMany(c => c.Inventory)
+             .HasForeignKey(i => i.CharacterID);
+
+            e.HasOne(i => i.Item)
+             .WithMany()
+             .HasForeignKey(i => i.ItemID);
+        });
+
+        
+        // QUEST
+        modelBuilder.Entity<Quest>(e =>
+        {
+            e.ToTable("quest");
+
+            e.HasKey(q => q.QuestID);
+            e.Property(q => q.QuestID).HasColumnName("quest_id");
+            e.Property(q => q.Title).HasColumnName("title");
+            e.Property(q => q.XPReward).HasColumnName("xp_reward");
+        });
+
+        // -- JOINED TABLES --
 
         // CHARACTER_QUEST
-        modelBuilder.Entity<CharacterQuest>()
-            .Property(cq => cq.CharacterID)
-            .HasColumnName("character_id");
+        modelBuilder.Entity<CharacterQuest>(e =>
+        {
+            e.ToTable("character_quest");
 
-        modelBuilder.Entity<CharacterQuest>()
-            .Property(cq => cq.QuestID)
-            .HasColumnName("quest_id");
+            e.HasKey(cq => new { cq.CharacterID, cq.QuestID });
 
-        modelBuilder.Entity<CharacterQuest>()
-            .HasKey(cq => new { cq.CharacterID, cq.QuestID });
+            e.Property(cq => cq.CharacterID).HasColumnName("character_id");
+            e.Property(cq => cq.QuestID).HasColumnName("quest_id");
 
-        modelBuilder.Entity<CharacterQuest>()
-            .HasOne(cq => cq.Character)
-            .WithMany(c => c.AcceptedQuests)
-            .HasForeignKey(cq => cq.CharacterID);
+            e.HasOne(cq => cq.Character)
+             .WithMany(c => c.AcceptedQuests)
+             .HasForeignKey(cq => cq.CharacterID);
 
-        modelBuilder.Entity<CharacterQuest>()
-            .HasOne(cq => cq.Quest)
-            .WithMany(q => q.AcceptedBy)
-            .HasForeignKey(cq => cq.QuestID);
+            e.HasOne(cq => cq.Quest)
+             .WithMany(q => q.AcceptedBy)
+             .HasForeignKey(cq => cq.QuestID);
+        });
 
+        
         // CHARACTER_MOUNT
-        modelBuilder.Entity<CharacterMount>()
-            .Property(cm => cm.CharacterID)
-            .HasColumnName("character_id");
+        modelBuilder.Entity<CharacterMount>(e =>
+        {
+            e.ToTable("character_mount");
 
-        modelBuilder.Entity<CharacterMount>()
-            .Property(cm => cm.MountID)
-            .HasColumnName("mount_id");
+            e.HasKey(cm => new { cm.CharacterID, cm.MountID });
 
-        modelBuilder.Entity<CharacterMount>()
-            .HasKey(cm => new { cm.CharacterID, cm.MountID });
+            e.Property(cm => cm.CharacterID).HasColumnName("character_id");
+            e.Property(cm => cm.MountID).HasColumnName("mount_id");
+            e.Property(cm => cm.CollectedDate).HasColumnName("collected_date");
 
-        modelBuilder.Entity<CharacterMount>()
-            .HasOne(cm => cm.Character)
-            .WithMany(c => c.CollectedMounts)
-            .HasForeignKey(cm => cm.CharacterID);
+            e.HasOne(cm => cm.Character)
+             .WithMany(c => c.CollectedMounts)
+             .HasForeignKey(cm => cm.CharacterID);
 
-        modelBuilder.Entity<CharacterMount>()
-            .HasOne(cm => cm.Mount)
-            .WithMany()
-            .HasForeignKey(cm => cm.MountID);
+            e.HasOne(cm => cm.Mount)
+             .WithMany()
+             .HasForeignKey(cm => cm.MountID);
+        });
 
+        
         // QUEST_REWARD
-        modelBuilder.Entity<QuestReward>()
-            .Property(qr => qr.QuestID)
-            .HasColumnName("quest_id");
+        modelBuilder.Entity<QuestReward>(e =>
+        {
+            e.ToTable("quest_reward");
 
-        modelBuilder.Entity<QuestReward>()
-            .Property(qr => qr.ItemID)
-            .HasColumnName("item_id");
+            e.HasKey(qr => new { qr.QuestID, qr.ItemID });
 
-        modelBuilder.Entity<QuestReward>()
-            .HasKey(qr => new { qr.QuestID, qr.ItemID });
+            e.Property(qr => qr.QuestID).HasColumnName("quest_id");
+            e.Property(qr => qr.ItemID).HasColumnName("item_id");
 
-        modelBuilder.Entity<QuestReward>()
-            .HasOne(qr => qr.Quest)
-            .WithMany(q => q.Rewards)
-            .HasForeignKey(qr => qr.QuestID);
+            e.HasOne(qr => qr.Quest)
+             .WithMany(q => q.Rewards)
+             .HasForeignKey(qr => qr.QuestID);
 
-        modelBuilder.Entity<QuestReward>()
-            .HasOne(qr => qr.Item)
-            .WithMany()
-            .HasForeignKey(qr => qr.ItemID);
-
-        // CHARACTER riding mount (1:1)
-        modelBuilder.Entity<Character>()
-            .Property(c => c.RidingMountID)
-            .HasColumnName("riding_mount_id");
-
-        modelBuilder.Entity<Character>()
-            .HasOne(c => c.RidingMount)
-            .WithOne()
-            .HasForeignKey<Character>(c => c.RidingMountID);
-
-        // INVENTORY
-        modelBuilder.Entity<Inventory>()
-            .Property(i => i.CharacterID)
-            .HasColumnName("character_id");
-
-        modelBuilder.Entity<Inventory>()
-            .Property(i => i.SlotNo)
-            .HasColumnName("slot_no");
-
-        modelBuilder.Entity<Inventory>()
-            .Property(i => i.ItemID)
-            .HasColumnName("item_id");
-
-        modelBuilder.Entity<Inventory>()
-            .Property(i => i.Amount)
-            .HasColumnName("amount");
-
-        modelBuilder.Entity<Inventory>()
-            .Property(i => i.Location)
-            .HasColumnName("location");
-
-        modelBuilder.Entity<Inventory>()
-            .HasKey(i => new { i.CharacterID, i.SlotNo });
-
-        modelBuilder.Entity<Inventory>()
-            .HasOne(i => i.Character)
-            .WithMany(c => c.Inventory)
-            .HasForeignKey(i => i.CharacterID);
-
-        modelBuilder.Entity<Inventory>()
-            .HasOne(i => i.Item)
-            .WithMany()
-            .HasForeignKey(i => i.ItemID);
+            e.HasOne(qr => qr.Item)
+             .WithMany()
+             .HasForeignKey(qr => qr.ItemID);
+        });
     }
+
 }
