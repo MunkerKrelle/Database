@@ -7,4 +7,6 @@ public class CharacterQuest
 
     public int QuestID { get; set; }
     public Quest? Quest { get; set; }
+
+    public bool IsCompleted { get; set; } = false;
 }

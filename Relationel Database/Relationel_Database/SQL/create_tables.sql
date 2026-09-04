@@ -79,6 +79,7 @@ CREATE TABLE quest (
 CREATE TABLE character_quest (
     character_id INT NOT NULL REFERENCES character(char_id),
     quest_id INT NOT NULL REFERENCES quest(quest_id),
+    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
 
     PRIMARY KEY (character_id, quest_id)
 );

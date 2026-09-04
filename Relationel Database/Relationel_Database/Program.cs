@@ -102,7 +102,7 @@ try
         .Include(cq => cq.Quest))
     {
         Console.WriteLine(
-            $"Character: {cq.Character?.CharName}, Quest: {cq.Quest?.Title}"
+            $"Character: {cq.Character?.CharName}, Quest: {cq.Quest?.Title}, Completed: {cq.IsCompleted}"
         );
     }
     Console.WriteLine();

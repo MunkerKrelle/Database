@@ -189,6 +189,8 @@ public class AppDbContext : DbContext
             e.HasOne(cq => cq.Quest)
              .WithMany(q => q.AcceptedBy)
              .HasForeignKey(cq => cq.QuestID);
+
+            e.Property(cq => cq.IsCompleted).HasColumnName("is_completed");
         });
 
         

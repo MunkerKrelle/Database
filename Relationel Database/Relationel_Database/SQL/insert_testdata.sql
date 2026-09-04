@@ -49,9 +49,9 @@ INSERT INTO quest (title, xp_reward) VALUES
 ('Collect 10 Herbs', 150);
 
 -- CHARACTER_QUEST (accepted quests)
-INSERT INTO character_quest (character_id, quest_id) VALUES
-(1, 1),
-(2, 2);
+INSERT INTO character_quest (character_id, quest_id, is_completed) VALUES
+(1, 1, true),
+(2, 2, false);
 
 -- QUEST_REWARD (quest gives items)
 INSERT INTO quest_reward (quest_id, item_id) VALUES
