@@ -1,7 +1,7 @@
 -- ACCOUNTS
-INSERT INTO account (email, password) VALUES
-('peter@example.com', '1234'),
-('kasper@example.com', 'abcd');
+INSERT INTO account (email, password_hash) VALUES
+('peter@example.com',  '$2a$11$mz5mEv/xjDRzD26vucMo4.3wDJQXRhlbeGJZdmyNokCUG9CKtwEy.'),
+('kasper@example.com', '$2a$11$TmKDJa56i/CwkTRWSw8gK.TAUUHdcTqbu4H12JGVPi1f.VG1c402K');
 
 -- REALMS
 INSERT INTO realm (realm_name) VALUES
@@ -19,19 +19,37 @@ VALUES
 ('PeterWarrior', 10, 150, 1, 1, 1),
 ('KasperMage', 20, 300, 2, 2, 2);
 
--- ITEMS
-INSERT INTO item (item_name, quality, item_type) VALUES
-('Sword', 'Common', 'Weapon'),
-('Shield', 'Common', 'Armor'),
-('Potion', 'Uncommon', 'Consumable'),
-('Epic Staff', 'Epic', 'Weapon');
+-- ITEM TYPES (the type decides how many fit in one slot)
+INSERT INTO item_type (type_name, max_stack) VALUES
+('Weapon', 1),
+('Off-hand', 1),
+('Chestpiece', 1),
+('Headwear', 1),
+('Footwear', 1),
+('Potion', 20),
+('Food', 20),
+('Misc', 50);
 
--- INVENTORY
-INSERT INTO inventory (character_id, slot_no, item_id, amount, location) VALUES
-(1, 1, 1, 1, 0),
-(1, 2, 2, 1, 0),
-(2, 1, 3, 5, 0),
-(2, 2, 4, 1, 0);
+-- ITEMS (name, quality, item type)
+INSERT INTO item (item_name, quality, item_type_id) VALUES
+('Sword', 'common', 1),        -- Weapon
+('Shield', 'common', 2),       -- Off-hand
+('Potion', 'uncommon', 6),     -- Potion, stacks to 20
+('Epic Staff', 'epic', 1);     -- Weapon
+
+-- INVENTORY TYPES
+INSERT INTO inventory_type (type_name, slot_count) VALUES
+('Backpack', 20),
+('Bank', 28),
+('Pockets', 4);
+
+-- INVENTORY (character, inventory type, slot, item, amount)
+INSERT INTO inventory (character_id, inventory_type_id, slot_no, item_id, amount) VALUES
+(1, 1, 1, 1, 1),   -- Peter, Backpack slot 1: Sword
+(1, 2, 1, 3, 2),   -- Peter, Bank slot 1: 2 Potions
+(1, 1, 2, 2, 1),   -- Peter, Backpack slot 2: Shield
+(2, 1, 1, 3, 5),   -- Kasper, Backpack slot 1: 5 Potions
+(2, 1, 2, 4, 1);   -- Kasper, Backpack slot 2: Epic Staff
 
 -- MOUNTS
 INSERT INTO mount (mount_name, speed, is_flying) VALUES

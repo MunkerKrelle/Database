@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 using Relationel_Database.Models;
 
 namespace Relationel_Database.Data;
@@ -10,7 +11,9 @@ public class AppDbContext : DbContext
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<Realm> Realms => Set<Realm>();
     public DbSet<Guild> Guilds => Set<Guild>();
+    public DbSet<ItemType> ItemTypes => Set<ItemType>();
     public DbSet<Item> Items => Set<Item>();
+    public DbSet<InventoryType> InventoryTypes => Set<InventoryType>();
     public DbSet<Inventory> Inventory => Set<Inventory>();
     public DbSet<Mount> Mounts => Set<Mount>();
     public DbSet<Quest> Quests => Set<Quest>();
@@ -25,8 +28,12 @@ public class AppDbContext : DbContext
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException("CONNECTION_STRING environment variable is not set.");
 
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        dataSourceBuilder.MapEnum<ItemQuality>("item_quality");
+        var dataSource = dataSourceBuilder.Build();
+
         optionsBuilder
-            .UseNpgsql(connectionString)
+            .UseNpgsql(dataSource)
             .UseSnakeCaseNamingConvention()
             .EnableSensitiveDataLogging()
             .EnableDetailedErrors()
@@ -35,7 +42,10 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        
+        // Register the Postgres ENUM with EF, so Item.Quality maps to column type item_quality.
+        modelBuilder.HasPostgresEnum<ItemQuality>(name: "item_quality");
+
+
         // ACCOUNT
         modelBuilder.Entity<Account>(e =>
         {
@@ -44,7 +54,7 @@ public class AppDbContext : DbContext
             e.HasKey(a => a.AccountID);
             e.Property(a => a.AccountID).HasColumnName("account_id");
             e.Property(a => a.Email).HasColumnName("email");
-            e.Property(a => a.Password).HasColumnName("password");
+            e.Property(a => a.PasswordHash).HasColumnName("password_hash");
 
             e.HasMany(a => a.Characters)
              .WithOne(c => c.Account)
@@ -124,6 +134,17 @@ public class AppDbContext : DbContext
         
         // ITEM
         
+        // ITEM_TYPE
+        modelBuilder.Entity<ItemType>(e =>
+        {
+            e.ToTable("item_type");
+
+            e.HasKey(t => t.ItemTypeID);
+            e.Property(t => t.ItemTypeID).HasColumnName("item_type_id");
+            e.Property(t => t.TypeName).HasColumnName("type_name");
+            e.Property(t => t.MaxStack).HasColumnName("max_stack");
+        });
+
         modelBuilder.Entity<Item>(e =>
         {
             e.ToTable("item");
@@ -132,26 +153,47 @@ public class AppDbContext : DbContext
             e.Property(i => i.ItemID).HasColumnName("item_id");
             e.Property(i => i.ItemName).HasColumnName("item_name");
             e.Property(i => i.Quality).HasColumnName("quality");
-            e.Property(i => i.ItemType).HasColumnName("item_type");
+            e.Property(i => i.ItemTypeID).HasColumnName("item_type_id");
+
+            e.HasOne(i => i.ItemType)
+             .WithMany()
+             .HasForeignKey(i => i.ItemTypeID);
         });
 
         
+        // INVENTORY_TYPE
+        modelBuilder.Entity<InventoryType>(e =>
+        {
+            e.ToTable("inventory_type");
+
+            e.HasKey(t => t.InventoryTypeID);
+            e.Property(t => t.InventoryTypeID).HasColumnName("inventory_type_id");
+            e.Property(t => t.TypeName).HasColumnName("type_name");
+            e.Property(t => t.SlotCount).HasColumnName("slot_count");
+        });
+
+
         // INVENTORY
         modelBuilder.Entity<Inventory>(e =>
         {
             e.ToTable("inventory");
 
-            e.HasKey(i => new { i.CharacterID, i.SlotNo });
+            // Same key as in SQL: one item per slot, per inventory, per character.
+            e.HasKey(i => new { i.CharacterID, i.InventoryTypeID, i.SlotNo });
 
             e.Property(i => i.CharacterID).HasColumnName("character_id");
+            e.Property(i => i.InventoryTypeID).HasColumnName("inventory_type_id");
             e.Property(i => i.SlotNo).HasColumnName("slot_no");
             e.Property(i => i.ItemID).HasColumnName("item_id");
             e.Property(i => i.Amount).HasColumnName("amount");
-            e.Property(i => i.Location).HasColumnName("location");
 
             e.HasOne(i => i.Character)
              .WithMany(c => c.Inventory)
              .HasForeignKey(i => i.CharacterID);
+
+            e.HasOne(i => i.InventoryType)
+             .WithMany()
+             .HasForeignKey(i => i.InventoryTypeID);
 
             e.HasOne(i => i.Item)
              .WithMany()

@@ -4,7 +4,7 @@ public class Character
 {
     public int CharId { get; set; }
     public string CharName { get; set; } = "";
-    public int Level { get; set; }
+    public int Level { get; set; } = 1;
     public int Gold { get; set; }
 
     public int AccountID { get; set; }

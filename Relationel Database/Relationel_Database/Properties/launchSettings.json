@@ -3,7 +3,7 @@
     "Relationel Database": {
       "commandName": "Project",
       "environmentVariables": {
-        "CONNECTION_STRING": "Host=localhost;Port=5432;Database=inventory;Username=postgres;Password=yourpassword"
+        "CONNECTION_STRING": "Host=localhost;Port=5432;Database=inventory;Username=game_server;Password=gamepassword"
       }
     },
     "Container (Dockerfile)": {

@@ -30,7 +30,8 @@ services:
     command: ["postgres", "dotnet", "/app/Relationel_Database.dll"]
 
     environment:
-      CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=postgres;Password=yourpassword"
+      # The app connects as game_server (SQL/roles.sql), not as the postgres superuser.
+      CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=game_server;Password=gamepassword"
 
 volumes:
   pgdata:
