@@ -3,10 +3,12 @@
 --   developer    full access. (still cant see passwords since they are hashed)
 --   game_server  what the C# game server needs, nothing more (rule of least privilege).
 --   moderator    read-only, PLAYER data only. No game content(avoid leaks, unreleased items f.eks), no email(GDPR).
+--   replicator   used by the standby server to receive a live copy of all changes (replication).
 
 CREATE ROLE developer   LOGIN PASSWORD 'devpassword';
 CREATE ROLE game_server LOGIN PASSWORD 'gamepassword';
 CREATE ROLE moderator   LOGIN PASSWORD 'modpassword';
+CREATE ROLE replicator  LOGIN REPLICATION PASSWORD 'replpassword';
 
 -- DEVELOPER: full access
 GRANT ALL PRIVILEGES ON ALL TABLES    IN SCHEMA public TO developer;

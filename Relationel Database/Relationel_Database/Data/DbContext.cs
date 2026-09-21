@@ -7,6 +7,11 @@ namespace Relationel_Database.Data;
 
 public class AppDbContext : DbContext
 {
+    private readonly string _connectionStringVariable;
+
+    public AppDbContext(string connectionStringVariable = "CONNECTION_STRING")
+        => _connectionStringVariable = connectionStringVariable;
+
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<Realm> Realms => Set<Realm>();
@@ -23,10 +28,10 @@ public class AppDbContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+        var connectionString = Environment.GetEnvironmentVariable(_connectionStringVariable);
 
         if (string.IsNullOrWhiteSpace(connectionString))
-            throw new InvalidOperationException("CONNECTION_STRING environment variable is not set.");
+            throw new InvalidOperationException($"{_connectionStringVariable} environment variable is not set.");
 
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
         dataSourceBuilder.MapEnum<ItemQuality>("item_quality");

@@ -11,6 +11,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./SQL:/docker-entrypoint-initdb.d
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+
+    # Use our own access-rules file instead of the default one, so the standby
+    # is allowed to connect for replication (see pg_hba.conf).
+    command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d inventory"]
@@ -18,20 +23,55 @@ services:
       timeout: 3s
       retries: 10
 
+  postgres_standby:
+    image: postgres:17
+    container_name: postgres_standby
+    depends_on:
+      - postgres
+    ports:
+      - "5433:5432"
+    environment:
+      PGPASSWORD: replpassword
+    volumes:
+      - pgdata_standby:/var/lib/postgresql/data
+    # First start only: wait for the primary, then clone it with pg_basebackup.
+    # -R writes standby.signal ("I am a follower") plus how to reach the primary.
+    # Every start after that: the clone already exists, so just start postgres.
+    command:
+      - bash
+      - -c
+      - |
+        until pg_isready -h postgres -U replicator -d inventory; do sleep 1; done
+        if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+          pg_basebackup -h postgres -U replicator -D /var/lib/postgresql/data -R -c fast
+        fi
+        exec docker-entrypoint.sh postgres
+
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d inventory"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: relationeldatabase_app
     depends_on:
-      - postgres
+      postgres:
+        condition: service_started
+      postgres_standby:
+        condition: service_healthy
     entrypoint: ["/wait-for-postgres.sh"]
 
     command: ["postgres", "dotnet", "/app/Relationel_Database.dll"]
 
     environment:
-      # The app connects as game_server (SQL/roles.sql), not as the postgres superuser.
       CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=game_server;Password=gamepassword"
+      STANDBY_CONNECTION_STRING: "Host=postgres_standby;Port=5432;Database=inventory;Username=game_server;Password=gamepassword"
 
 volumes:
   pgdata:
+  pgdata_standby:

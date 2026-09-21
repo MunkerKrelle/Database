@@ -29,7 +29,10 @@ try
     client.CreateCharacter("MadsPaladin", realmId: 1);       // character creation; needs a login
     Console.WriteLine();
 
-
+    Console.WriteLine("Replication:");
+    using var standby = new AppDbContext("STANDBY_CONNECTION_STRING");
+    Console.WriteLine("Standby has MadsPaladin: " + standby.Characters.Any(c => c.CharName == "MadsPaladin"));
+    Console.WriteLine();
     // --- DEVELOPER VIEW: look straight into the database ---
 
     // ACCOUNTS
