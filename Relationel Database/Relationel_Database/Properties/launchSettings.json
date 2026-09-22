@@ -4,7 +4,8 @@
       "commandName": "Project",
       "environmentVariables": {
         "CONNECTION_STRING": "Host=localhost;Port=5432;Database=inventory;Username=game_server;Password=gamepassword",
-        "STANDBY_CONNECTION_STRING": "Host=localhost;Port=5433;Database=inventory;Username=game_server;Password=gamepassword"
+        "STANDBY_CONNECTION_STRING": "Host=localhost;Port=5433;Database=inventory;Username=game_server;Password=gamepassword",
+        "ADMIN_CONNECTION_STRING": "Host=localhost;Port=5432;Database=inventory;Username=postgres;Password=yourpassword"
       }
     },
     "Container (Dockerfile)": {
