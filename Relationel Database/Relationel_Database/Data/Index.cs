@@ -832,6 +832,7 @@ public static class IndexBenchmark
             Console.WriteLine(
                 $"{configurationGroup.Key}: " +
                 $"{averageHits:F2} average shared hit blocks");
+            Console.WriteLine();
         }
     }
 

@@ -146,14 +146,9 @@ static void GenerateTestData(AppDbContext db, int characterCount)
     {
         int realmId = random.Next(1, 3);
 
-        int? guildId = null;
-
-        if (random.NextDouble() < 0.5
-            && guildsByRealm.TryGetValue(realmId, out var guildOptions)
-            && guildOptions.Count > 0)
-        {
-            guildId = guildOptions[random.Next(guildOptions.Count)];
-        }
+        int guildId = guildsByRealm.TryGetValue(realmId, out var guildIds) && guildIds.Count > 0
+            ? guildIds[random.Next(guildIds.Count)]
+            : 0;
 
         characters.Add(new Character
         {

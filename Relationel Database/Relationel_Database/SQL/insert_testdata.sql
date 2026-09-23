@@ -11,7 +11,15 @@ INSERT INTO realm (realm_name) VALUES
 -- GUILDS
 INSERT INTO guild (guild_name, realm_id) VALUES
 ('Warriors of Light', 1),
-('Shadow Clan', 2);
+('Shadow Clan', 2),
+('Destroyers', 1),
+('Mages United', 2),
+('Dark Brotherhood', 1),
+('Knights of Valor', 2),
+('Miracle Guild', 1),
+('Legends of the North', 2),
+('Crimson Blades', 1),
+('Eternal Guardians', 2);
 
 -- CHARACTERS
 INSERT INTO character (char_name, level, gold, account_id, realm_id, guild_id)
