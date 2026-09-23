@@ -71,6 +71,7 @@ services:
     environment:
       CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=game_server;Password=gamepassword"
       STANDBY_CONNECTION_STRING: "Host=postgres_standby;Port=5432;Database=inventory;Username=game_server;Password=gamepassword"
+      ADMIN_CONNECTION_STRING: "Host=postgres;Port=5432;Database=inventory;Username=postgres;Password=yourpassword"
 
 volumes:
   pgdata:

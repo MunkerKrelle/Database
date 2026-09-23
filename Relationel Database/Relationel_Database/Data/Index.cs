@@ -1,96 +1,851 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Relationel_Database.Data;
+using System.Globalization;
 
 namespace Relationel_Database.Analysis;
 
-/// <summary>
-/// Kører de samme 4 queries to gange: én gang uden indexes (Seq Scan)
-/// og én gang med indexes (forventeligt Index Scan). EXPLAIN (ANALYZE, BUFFERS)
-/// bliver printet rå til konsollen, så man kan se:
-///   - Seq Scan vs. Index Scan
-///   - "rows=" (estimeret) og "actual rows=" (faktisk fundet)
-///   - "Rows Removed by Filter" -> hvor mange rækker der blev scannet forgæves
-///   - "actual time=" -> reel køretid i ms
-/// </summary>
 public static class IndexBenchmark
 {
-    // Skift tallene ud, hvis I har genereret data med andre id'er/navne.
-    private static readonly (string Label, string Sql)[] Queries =
+    // ============================================================
+    // QUERY DEFINITIONS
+    // ============================================================
+
+    private sealed record BenchmarkQuery(
+        string Name,
+        string Sql,
+        string Purpose);
+
+    private sealed record BenchmarkResult(
+        string Configuration,
+        string QueryName,
+        string ScanType,
+        double PlanningTimeMs,
+        double ExecutionTimeMs,
+        long SharedHitBlocks,
+        long SharedReadBlocks);
+
+
+    // ============================================================
+    // QUERIES USED BY THE BENCHMARK
+    // ============================================================
+
+    private static readonly BenchmarkQuery[] Queries =
     {
-        ("Find karakter på navn (punktopslag)",
-            "SELECT * FROM character WHERE char_name = 'Char_2500'"),
+        new(
+            "Character name equality",
+            "SELECT * FROM character WHERE char_name = 'Char_2500'",
+            "Equality lookup"),
 
-        ("Find alle karakterer på én realm (filter)",
-            "SELECT * FROM character WHERE realm_id = 1"),
+        new(
+            "Characters by realm equality",
+            "SELECT * FROM character WHERE realm_id = 1",
+            "Equality filter"),
 
-        ("Find alt inventory for én karakter (hyppigste 'hot path')",
-            "SELECT * FROM inventory WHERE character_id = 2500"),
+        new(
+            "Inventory by character equality",
+            "SELECT * FROM inventory WHERE character_id = 2500",
+            "Frequent equality lookup"),
 
-        ("Find konto på email (kontrolgruppe - er sandsynligvis allerede unik-indekseret)",
-            "SELECT * FROM account WHERE email = 'user2500@example.com'")
+        new(
+            "Characters by level range",
+            "SELECT * FROM character WHERE level BETWEEN 50 AND 60",
+            "Range query"),
+
+        new(
+            "Account by email control query",
+            "SELECT * FROM account WHERE email = 'user2500@example.com'",
+            "Control query")
     };
+
+
+    // ============================================================
+    // INDEX NAMES CREATED BY THIS BENCHMARK
+    // ============================================================
+
+    private static readonly string[] TestIndexNames =
+    {
+        // B-tree indexes
+        "idx_character_char_name_btree",
+        "idx_character_realm_id_btree",
+        "idx_inventory_character_id_btree",
+        "idx_character_level_btree",
+
+        // Hash indexes
+        "idx_character_char_name_hash",
+        "idx_character_realm_id_hash",
+        "idx_inventory_character_id_hash",
+        "idx_character_level_hash"
+    };
+
+
+    // ============================================================
+    // MAIN BENCHMARK
+    // ============================================================
 
     public static void Run(AppDbContext db)
     {
+        // --------------------------------------------------------
+        // Normal application connection
+        //
+        // This connection uses the game_server role.
+        // It is used for:
+        //
+        // - SELECT queries
+        // - EXPLAIN ANALYZE
+        // - ANALYZE
+        //
+        // It is NOT used to create or drop indexes.
+        // --------------------------------------------------------
+
         db.Database.OpenConnection();
-        var conn = (NpgsqlConnection)db.Database.GetDbConnection();
 
-        Console.WriteLine("################  FASE 1: UDEN INDEXES  ################\n");
-        DropTestIndexes(conn);
-        Analyze(conn);
-        foreach (var (label, sql) in Queries)
-            Explain(conn, label, sql);
+        var connection =
+            (NpgsqlConnection)db.Database.GetDbConnection();
 
-        Console.WriteLine("################  OPRETTER INDEXES  ################\n");
-        CreateTestIndexes(conn);
-        Analyze(conn);
+        // --------------------------------------------------------
+        // Administrator connection
+        //
+        // CREATE INDEX and DROP INDEX require appropriate
+        // privileges/ownership of the table.
+        //
+        // Therefore these operations are performed through the
+        // ADMIN_CONNECTION_STRING.
+        // --------------------------------------------------------
 
-        Console.WriteLine("################  FASE 2: MED INDEXES  ################\n");
-        foreach (var (label, sql) in Queries)
-            Explain(conn, label, sql);
+        var adminConnectionString =
+            Environment.GetEnvironmentVariable(
+                "ADMIN_CONNECTION_STRING")
+            ?? throw new InvalidOperationException(
+                "ADMIN_CONNECTION_STRING environment variable is not set.");
+
+
+        using var adminConnection =
+            new NpgsqlConnection(adminConnectionString);
+
+        adminConnection.Open();
+
+
+        var allResults = new List<BenchmarkResult>();
+
+
+        try
+        {
+            Console.WriteLine(
+                "============================================================");
+
+            Console.WriteLine(
+                "INDEX BENCHMARK: NO INDEX vs B-TREE vs HASH");
+
+            Console.WriteLine(
+                "============================================================");
+
+            Console.WriteLine();
+
+            Console.WriteLine(
+                "Application connection: game_server");
+
+            Console.WriteLine(
+                "Index administration connection: postgres");
+
+            Console.WriteLine();
+
+
+            // ====================================================
+            // CONFIGURATION 1
+            // NO TEST INDEXES
+            // ====================================================
+
+            Console.WriteLine(
+                "Preparing baseline configuration...");
+
+            DropTestIndexes(adminConnection);
+
+            Analyze(connection);
+
+
+            allResults.AddRange(
+                RunConfiguration(
+                    connection,
+                    "No test indexes",
+                    "Baseline without the additional benchmark indexes."
+                ));
+
+
+            // ====================================================
+            // CONFIGURATION 2
+            // B-TREE INDEXES
+            // ====================================================
+
+            DropTestIndexes(adminConnection);
+
+            Console.WriteLine(
+                "Creating B-tree indexes...");
+
+            CreateBTreeIndexes(adminConnection);
+
+            Analyze(connection);
+
+
+            allResults.AddRange(
+                RunConfiguration(
+                    connection,
+                    "B-tree indexes",
+                    "B-tree is an ordered index structure."
+                ));
+
+
+            // ====================================================
+            // CONFIGURATION 3
+            // HASH INDEXES
+            // ====================================================
+
+            DropTestIndexes(adminConnection);
+
+            Console.WriteLine(
+                "Creating Hash indexes...");
+
+            CreateHashIndexes(adminConnection);
+
+            Analyze(connection);
+
+
+            allResults.AddRange(
+                RunConfiguration(
+                    connection,
+                    "Hash indexes",
+                    "Hash indexes are primarily designed for equality lookups."
+                ));
+
+
+            // ====================================================
+            // FINAL COMPARISON
+            // ====================================================
+
+            PrintComparison(allResults);
+        }
+        finally
+        {
+            // ----------------------------------------------------
+            // Always remove the test indexes when the benchmark
+            // finishes.
+            //
+            // This MUST use the administrator connection.
+            // ----------------------------------------------------
+
+            DropTestIndexes(adminConnection);
+        }
     }
 
-    private static void Explain(NpgsqlConnection conn, string label, string sql)
-    {
-        Console.WriteLine($"--- {label} ---");
-        Console.WriteLine($"SQL: {sql}");
 
-        using var cmd = new NpgsqlCommand($"EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) {sql}", conn);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            Console.WriteLine(reader.GetString(0));
+    // ============================================================
+    // RUN ONE CONFIGURATION
+    // ============================================================
+
+    private static List<BenchmarkResult> RunConfiguration(
+        NpgsqlConnection connection,
+        string configuration,
+        string description)
+    {
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+        Console.WriteLine(
+            $"CONFIGURATION: {configuration}");
+
+        Console.WriteLine(
+            description);
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
 
         Console.WriteLine();
+
+
+        var results = new List<BenchmarkResult>();
+
+
+        foreach (var query in Queries)
+        {
+            var result =
+                Explain(
+                    connection,
+                    configuration,
+                    query);
+
+
+            results.Add(result);
+
+
+            Console.WriteLine(
+                $"Query: {query.Name}");
+
+            Console.WriteLine(
+                $"Purpose: {query.Purpose}");
+
+            Console.WriteLine(
+                $"Scan type: {result.ScanType}");
+
+            Console.WriteLine(
+                $"Planning time: {result.PlanningTimeMs:F3} ms");
+
+            Console.WriteLine(
+                $"Execution time: {result.ExecutionTimeMs:F3} ms");
+
+            Console.WriteLine(
+                $"Shared hit blocks: {result.SharedHitBlocks}");
+
+            Console.WriteLine(
+                $"Shared read blocks: {result.SharedReadBlocks}");
+
+            Console.WriteLine();
+        }
+
+
+        return results;
     }
 
-    private static void DropTestIndexes(NpgsqlConnection conn)
+
+    // ============================================================
+    // EXPLAIN ANALYZE
+    // ============================================================
+
+    private static BenchmarkResult Explain(
+        NpgsqlConnection connection,
+        string configuration,
+        BenchmarkQuery query)
     {
-        Exec(conn, "DROP INDEX IF EXISTS idx_character_char_name;");
-        Exec(conn, "DROP INDEX IF EXISTS idx_character_realm_id;");
-        Exec(conn, "DROP INDEX IF EXISTS idx_inventory_character_id;");
+        var lines = new List<string>();
+
+
+        using var command = new NpgsqlCommand(
+            $"EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) {query.Sql}",
+            connection);
+
+
+        using var reader =
+            command.ExecuteReader();
+
+
+        while (reader.Read())
+        {
+            lines.Add(
+                reader.GetString(0));
+        }
+
+
+        var plan =
+            string.Join(
+                Environment.NewLine,
+                lines);
+
+
+        return new BenchmarkResult(
+            configuration,
+            query.Name,
+            DetectScanType(plan),
+            ExtractMilliseconds(
+                plan,
+                "Planning Time:"),
+            ExtractMilliseconds(
+                plan,
+                "Execution Time:"),
+            ExtractBufferValue(
+                plan,
+                "shared hit="),
+            ExtractBufferValue(
+                plan,
+                "shared read="));
     }
 
-    private static void CreateTestIndexes(NpgsqlConnection conn)
+
+    // ============================================================
+    // DETECT SCAN TYPE
+    // ============================================================
+
+    private static string DetectScanType(
+        string plan)
     {
-        Exec(conn, "CREATE INDEX idx_character_char_name ON character(char_name);");
-        Exec(conn, "CREATE INDEX idx_character_realm_id ON character(realm_id);");
-        Exec(conn, "CREATE INDEX idx_inventory_character_id ON inventory(character_id);");
+        if (plan.Contains(
+                "Index Only Scan",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "Index Only Scan";
+        }
+
+
+        if (plan.Contains(
+                "Bitmap Heap Scan",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "Bitmap Heap Scan";
+        }
+
+
+        if (plan.Contains(
+                "Index Scan",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "Index Scan";
+        }
+
+
+        if (plan.Contains(
+                "Seq Scan",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "Sequential Scan";
+        }
+
+
+        return "Other / unknown";
     }
 
-    private static void Analyze(NpgsqlConnection conn)
+
+    // ============================================================
+    // EXTRACT PLANNING / EXECUTION TIME
+    // ============================================================
+
+    private static double ExtractMilliseconds(
+        string plan,
+        string label)
     {
-        // ANALYZE opdaterer Postgres' statistik, så planlæggeren regner
-        // korrekt både før og efter vi laver indexes.
-        Exec(conn, "ANALYZE account;");
-        Exec(conn, "ANALYZE character;");
-        Exec(conn, "ANALYZE inventory;");
+        var line =
+            plan
+                .Split(Environment.NewLine)
+                .FirstOrDefault(
+                    line =>
+                        line.TrimStart()
+                            .StartsWith(
+                                label,
+                                StringComparison.OrdinalIgnoreCase));
+
+
+        if (line is null)
+        {
+            return 0;
+        }
+
+
+        var colonIndex =
+            line.IndexOf(':');
+
+
+        if (colonIndex < 0)
+        {
+            return 0;
+        }
+
+
+        var value =
+            line[(colonIndex + 1)..]
+                .Trim()
+                .Split(
+                    ' ',
+                    StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault();
+
+
+        return double.TryParse(
+            value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var result)
+            ? result
+            : 0;
     }
 
-    private static void Exec(NpgsqlConnection conn, string sql)
+
+    // ============================================================
+    // EXTRACT BUFFER VALUE
+    // ============================================================
+
+    private static long ExtractBufferValue(
+        string plan,
+        string label)
     {
-        using var cmd = new NpgsqlCommand(sql, conn);
-        cmd.ExecuteNonQuery();
+        var index =
+            plan.IndexOf(
+                label,
+                StringComparison.OrdinalIgnoreCase);
+
+
+        if (index < 0)
+        {
+            return 0;
+        }
+
+
+        index += label.Length;
+
+
+        var digits =
+            new string(
+                plan[index..]
+                    .TakeWhile(char.IsDigit)
+                    .ToArray());
+
+
+        return long.TryParse(
+            digits,
+            out var result)
+            ? result
+            : 0;
+    }
+
+
+    // ============================================================
+    // CREATE B-TREE INDEXES
+    // ============================================================
+
+    private static void CreateBTreeIndexes(
+        NpgsqlConnection adminConnection)
+    {
+        // --------------------------------------------------------
+        // IMPORTANT:
+        //
+        // These commands use the ADMIN connection because the
+        // game_server role does not own the character/inventory
+        // tables.
+        //
+        // B-tree is PostgreSQL's default index method.
+        //
+        // It is an ordered index structure and supports:
+        //
+        // - Equality comparisons
+        // - Range comparisons
+        // - Sorting / ordered operations
+        // --------------------------------------------------------
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_character_char_name_btree
+            ON character USING BTREE (char_name);
+            """);
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_character_realm_id_btree
+            ON character USING BTREE (realm_id);
+            """);
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_inventory_character_id_btree
+            ON inventory USING BTREE (character_id);
+            """);
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_character_level_btree
+            ON character USING BTREE (level);
+            """);
+    }
+
+
+    // ============================================================
+    // CREATE HASH INDEXES
+    // ============================================================
+
+    private static void CreateHashIndexes(
+        NpgsqlConnection adminConnection)
+    {
+        // --------------------------------------------------------
+        // Hash indexes are primarily intended for equality
+        // comparisons.
+        //
+        // Example:
+        //
+        // WHERE char_name = 'Char_2500'
+        //
+        // They do not provide ordered access for range queries.
+        // --------------------------------------------------------
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_character_char_name_hash
+            ON character USING HASH (char_name);
+            """);
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_character_realm_id_hash
+            ON character USING HASH (realm_id);
+            """);
+
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_inventory_character_id_hash
+            ON inventory USING HASH (character_id);
+            """);
+
+
+        // --------------------------------------------------------
+        // This index is intentionally included because the
+        // benchmark also contains a range query.
+        //
+        // A Hash index is not designed for range access, so this
+        // allows the experiment to demonstrate the difference
+        // between Hash and B-tree indexes.
+        // --------------------------------------------------------
+
+        Execute(
+            adminConnection,
+            """
+            CREATE INDEX idx_character_level_hash
+            ON character USING HASH (level);
+            """);
+    }
+
+
+    // ============================================================
+    // DROP TEST INDEXES
+    // ============================================================
+
+    private static void DropTestIndexes(
+        NpgsqlConnection adminConnection)
+    {
+        // --------------------------------------------------------
+        // DROP INDEX also requires the appropriate privileges.
+        // Therefore this method always uses the admin connection.
+        // --------------------------------------------------------
+
+
+        foreach (var indexName in TestIndexNames)
+        {
+            Execute(
+                adminConnection,
+                $"DROP INDEX IF EXISTS {indexName};");
+        }
+    }
+
+
+    // ============================================================
+    // UPDATE DATABASE STATISTICS
+    // ============================================================
+
+    private static void Analyze(
+        NpgsqlConnection connection)
+    {
+        // --------------------------------------------------------
+        // ANALYZE updates PostgreSQL's table statistics.
+        //
+        // The query planner uses these statistics when deciding
+        // which execution plan to use.
+        //
+        // ANALYZE does not change the schema, so it can be run
+        // through the normal application connection.
+        // --------------------------------------------------------
+
+        Execute(
+            connection,
+            "ANALYZE account;");
+
+        Execute(
+            connection,
+            "ANALYZE character;");
+
+        Execute(
+            connection,
+            "ANALYZE inventory;");
+    }
+
+
+    // ============================================================
+    // EXECUTE SQL
+    // ============================================================
+
+    private static void Execute(
+        NpgsqlConnection connection,
+        string sql)
+    {
+        using var command =
+            new NpgsqlCommand(
+                sql,
+                connection);
+
+
+        command.ExecuteNonQuery();
+    }
+
+
+    // ============================================================
+    // FINAL COMPARISON
+    // ============================================================
+
+    private static void PrintComparison(
+        List<BenchmarkResult> results)
+    {
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "============================================================");
+
+        Console.WriteLine(
+            "FINAL COMPARISON");
+
+        Console.WriteLine(
+            "============================================================");
+
+        Console.WriteLine();
+
+
+        Console.WriteLine(
+            "{0,-34} {1,-20} {2,-19} {3,12} {4,12} {5,10}",
+            "Query",
+            "Configuration",
+            "Scan type",
+            "Planning ms",
+            "Execution ms",
+            "Hit blocks");
+
+
+        Console.WriteLine(
+            new string('-', 115));
+
+
+        foreach (var result in results)
+        {
+            Console.WriteLine(
+                "{0,-34} {1,-20} {2,-19} {3,12:F3} {4,12:F3} {5,10}",
+                Shorten(
+                    result.QueryName,
+                    34),
+                Shorten(
+                    result.Configuration,
+                    20),
+                Shorten(
+                    result.ScanType,
+                    19),
+                result.PlanningTimeMs,
+                result.ExecutionTimeMs,
+                result.SharedHitBlocks);
+        }
+
+
+        // ========================================================
+        // FASTEST CONFIGURATION PER QUERY
+        // ========================================================
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+        Console.WriteLine(
+            "FASTEST CONFIGURATION PER QUERY");
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+
+        foreach (var queryGroup in results.GroupBy(
+                     result => result.QueryName))
+        {
+            var fastest =
+                queryGroup
+                    .OrderBy(
+                        result => result.ExecutionTimeMs)
+                    .First();
+
+
+            Console.WriteLine(
+                $"{queryGroup.Key}: " +
+                $"{fastest.Configuration} " +
+                $"({fastest.ExecutionTimeMs:F3} ms, " +
+                $"{fastest.ScanType})");
+        }
+
+
+        // ========================================================
+        // AVERAGE EXECUTION TIME
+        // ========================================================
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+        Console.WriteLine(
+            "AVERAGE EXECUTION TIME BY CONFIGURATION");
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+
+        foreach (var configurationGroup in results.GroupBy(
+                     result => result.Configuration))
+        {
+            var average =
+                configurationGroup
+                    .Average(
+                        result => result.ExecutionTimeMs);
+
+
+            Console.WriteLine(
+                $"{configurationGroup.Key}: " +
+                $"{average:F3} ms average execution time");
+        }
+
+
+        // ========================================================
+        // AVERAGE BUFFER USAGE
+        // ========================================================
+
+        Console.WriteLine();
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+        Console.WriteLine(
+            "AVERAGE SHARED BUFFER HITS BY CONFIGURATION");
+
+        Console.WriteLine(
+            "------------------------------------------------------------");
+
+
+        foreach (var configurationGroup in results.GroupBy(
+                     result => result.Configuration))
+        {
+            var averageHits =
+                configurationGroup
+                    .Average(
+                        result => result.SharedHitBlocks);
+
+
+            Console.WriteLine(
+                $"{configurationGroup.Key}: " +
+                $"{averageHits:F2} average shared hit blocks");
+        }
+    }
+
+
+    // ============================================================
+    // SHORTEN LONG OUTPUT
+    // ============================================================
+
+    private static string Shorten(
+        string value,
+        int maxLength)
+    {
+        return value.Length <= maxLength
+            ? value
+            : value[..(maxLength - 3)] + "...";
     }
 }
