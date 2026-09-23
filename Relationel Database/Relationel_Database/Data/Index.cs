@@ -85,33 +85,11 @@ public static class IndexBenchmark
 
     public static void Run(AppDbContext db)
     {
-        // --------------------------------------------------------
-        // Normal application connection
-        //
-        // This connection uses the game_server role.
-        // It is used for:
-        //
-        // - SELECT queries
-        // - EXPLAIN ANALYZE
-        // - ANALYZE
-        //
-        // It is NOT used to create or drop indexes.
-        // --------------------------------------------------------
 
         db.Database.OpenConnection();
 
         var connection =
             (NpgsqlConnection)db.Database.GetDbConnection();
-
-        // --------------------------------------------------------
-        // Administrator connection
-        //
-        // CREATE INDEX and DROP INDEX require appropriate
-        // privileges/ownership of the table.
-        //
-        // Therefore these operations are performed through the
-        // ADMIN_CONNECTION_STRING.
-        // --------------------------------------------------------
 
         var adminConnectionString =
             Environment.GetEnvironmentVariable(
@@ -503,22 +481,6 @@ public static class IndexBenchmark
     private static void CreateBTreeIndexes(
         NpgsqlConnection adminConnection)
     {
-        // --------------------------------------------------------
-        // IMPORTANT:
-        //
-        // These commands use the ADMIN connection because the
-        // game_server role does not own the character/inventory
-        // tables.
-        //
-        // B-tree is PostgreSQL's default index method.
-        //
-        // It is an ordered index structure and supports:
-        //
-        // - Equality comparisons
-        // - Range comparisons
-        // - Sorting / ordered operations
-        // --------------------------------------------------------
-
 
         Execute(
             adminConnection,
@@ -560,17 +522,6 @@ public static class IndexBenchmark
     private static void CreateHashIndexes(
         NpgsqlConnection adminConnection)
     {
-        // --------------------------------------------------------
-        // Hash indexes are primarily intended for equality
-        // comparisons.
-        //
-        // Example:
-        //
-        // WHERE char_name = 'Char_2500'
-        //
-        // They do not provide ordered access for range queries.
-        // --------------------------------------------------------
-
 
         Execute(
             adminConnection,
@@ -595,16 +546,6 @@ public static class IndexBenchmark
             ON inventory USING HASH (character_id);
             """);
 
-
-        // --------------------------------------------------------
-        // This index is intentionally included because the
-        // benchmark also contains a range query.
-        //
-        // A Hash index is not designed for range access, so this
-        // allows the experiment to demonstrate the difference
-        // between Hash and B-tree indexes.
-        // --------------------------------------------------------
-
         Execute(
             adminConnection,
             """
@@ -621,11 +562,6 @@ public static class IndexBenchmark
     private static void DropTestIndexes(
         NpgsqlConnection adminConnection)
     {
-        // --------------------------------------------------------
-        // DROP INDEX also requires the appropriate privileges.
-        // Therefore this method always uses the admin connection.
-        // --------------------------------------------------------
-
 
         foreach (var indexName in TestIndexNames)
         {
@@ -643,16 +579,6 @@ public static class IndexBenchmark
     private static void Analyze(
         NpgsqlConnection connection)
     {
-        // --------------------------------------------------------
-        // ANALYZE updates PostgreSQL's table statistics.
-        //
-        // The query planner uses these statistics when deciding
-        // which execution plan to use.
-        //
-        // ANALYZE does not change the schema, so it can be run
-        // through the normal application connection.
-        // --------------------------------------------------------
-
         Execute(
             connection,
             "ANALYZE account;");

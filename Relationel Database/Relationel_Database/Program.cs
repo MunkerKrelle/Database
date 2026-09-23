@@ -35,24 +35,12 @@ try
 
     if (db.Accounts.Count() < 100)
     {
-        GenerateTestData(db, characterCount: 5000);
+        GenerateTestData(db, characterCount: 50000);
     }
     else
     {
         Console.WriteLine("Test data already exists - skipping generation.\n");
     }
-
-    // ------------------------------------------------------------
-    // INDEX BENCHMARK
-    //
-    // The same four queries are executed twice:
-    //
-    // 1. Without the test indexes
-    // 2. With the test indexes
-    //
-    // PostgreSQL EXPLAIN ANALYZE is used to show the query plan,
-    // execution time, number of rows and buffer usage.
-    // ------------------------------------------------------------
 
     IndexBenchmark.Run(db);
 
