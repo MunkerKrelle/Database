@@ -66,7 +66,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(c => c.AccountID);
         });
 
-        
+
         // REALM
         modelBuilder.Entity<Realm>(e =>
         {
@@ -85,7 +85,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(g => g.RealmID);
         });
 
-        
+
         // GUILD
         modelBuilder.Entity<Guild>(e =>
         {
@@ -101,7 +101,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(c => c.GuildID);
         });
 
-        
+
         // MOUNT
         modelBuilder.Entity<Mount>(e =>
         {
@@ -114,7 +114,7 @@ public class AppDbContext : DbContext
             e.Property(m => m.IsFlying).HasColumnName("is_flying");
         });
 
-        
+
         // CHARACTER
         modelBuilder.Entity<Character>(e =>
         {
@@ -136,9 +136,9 @@ public class AppDbContext : DbContext
              .HasForeignKey<Character>(c => c.RidingMountID);
         });
 
-        
+
         // ITEM
-        
+
         // ITEM_TYPE
         modelBuilder.Entity<ItemType>(e =>
         {
@@ -165,7 +165,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(i => i.ItemTypeID);
         });
 
-        
+
         // INVENTORY_TYPE
         modelBuilder.Entity<InventoryType>(e =>
         {
@@ -205,7 +205,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(i => i.ItemID);
         });
 
-        
+
         // QUEST
         modelBuilder.Entity<Quest>(e =>
         {
@@ -240,7 +240,7 @@ public class AppDbContext : DbContext
             e.Property(cq => cq.IsCompleted).HasColumnName("is_completed");
         });
 
-        
+
         // CHARACTER_MOUNT
         modelBuilder.Entity<CharacterMount>(e =>
         {
@@ -261,7 +261,7 @@ public class AppDbContext : DbContext
              .HasForeignKey(cm => cm.MountID);
         });
 
-        
+
         // QUEST_REWARD
         modelBuilder.Entity<QuestReward>(e =>
         {
@@ -281,5 +281,4 @@ public class AppDbContext : DbContext
              .HasForeignKey(qr => qr.ItemID);
         });
     }
-
 }

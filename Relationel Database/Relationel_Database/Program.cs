@@ -1,11 +1,10 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
+using Npgsql;
+using Relationel_Database.Analysis;
 using Relationel_Database.Client;
 using Relationel_Database.Data;
 using Relationel_Database.Models;
 using Relationel_Database.Server;
-
 
 try
 {
@@ -14,164 +13,79 @@ try
     Console.WriteLine("Database connected: " + db.Database.CanConnect());
     Console.WriteLine("--------------------------------------------");
 
+    // ------------------------------------------------------------
+    // PSEUDO CLIENT / SERVER
+    // ------------------------------------------------------------
 
-    // --- PSEUDO CLIENT / SERVER ---
-    // The client (the player's PC) has no database access at all. It talks to the
-    // server, and only the server talks to Postgres, as the role game_server defined in roles.sql
-    // the following is a few calls that show how the pieces could fit together, in a rough theoretic sense
     var server = new GameServer();
     var client = new GameClient(server);
 
     Console.WriteLine("Player session:");
-    client.SignUp("mads@gmail.com", "12kode34");    // password travels client -> server, server only the hash+salt
-    client.Login("mads@gmail.com", "kode1234");           // wrong password
-    client.Login("mads@gmail.com", "12kode34");           // correct password
-    client.CreateCharacter("MadsPaladin", realmId: 1);       // character creation; needs a login
-    
+
+    client.SignUp("mads@gmail.com", "12kode34");
+    client.Login("mads@gmail.com", "kode1234");   // Wrong password
+    client.Login("mads@gmail.com", "12kode34");   // Correct password
+    client.CreateCharacter("MadsPaladin", realmId: 1);
+
     // Transaction
     client.BuyItem(buyerId: 3, sellerId: 1, inventoryTypeId: 1, slotNo: 2, price: 50);
+
     Console.WriteLine();
 
-    // Replicaton
+    // Replication
     Console.WriteLine("Replication:");
     using var standby = new AppDbContext("STANDBY_CONNECTION_STRING");
     Console.WriteLine("Standby has MadsPaladin: " + standby.Characters.Any(c => c.CharName == "MadsPaladin"));
     Console.WriteLine();
-    
-    // --- DEVELOPER VIEW: look straight into the database ---
-    // ACCOUNTS
-    Console.WriteLine("Accounts:");
-    foreach (var acc in db.Accounts)
-        Console.WriteLine($"ID: {acc.AccountID}, Email: {acc.Email}");
-    Console.WriteLine();
 
-    // REALMS
-    Console.WriteLine("Realms:");
-    foreach (var r in db.Realms)
-        Console.WriteLine($"ID: {r.RealmID}, Name: {r.RealmName}");
-    Console.WriteLine();
+    // ------------------------------------------------------------
+    // GENERATE TEST DATA
+    // ------------------------------------------------------------
 
-    // GUILDS
-    Console.WriteLine("Guilds:");
-    foreach (var g in db.Guilds.Include(g => g.Realm))
-        Console.WriteLine($"ID: {g.GuildID}, Name: {g.GuildName}, Realm: {g.Realm?.RealmName}");
-    Console.WriteLine();
+    if (db.Accounts.Count() < 100)
+    {
+        GenerateTestData(db, characterCount: 50000);
+    }
+    else
+    {
+        Console.WriteLine("Test data already exists - skipping generation.\n");
+    }
 
-    // CHARACTERS
-    Console.WriteLine("Characters:");
-    foreach (var c in db.Characters
+    IndexBenchmark.Run(db);
+
+    // ------------------------------------------------------------
+    // DEVELOPER VIEW
+    // ------------------------------------------------------------
+
+    Console.WriteLine("Characters (first 20):");
+
+    foreach (var character in db.Characters
         .Include(c => c.Account)
         .Include(c => c.Realm)
-        .Include(c => c.Guild))
+        .Include(c => c.Guild)
+        .Take(20))
     {
         Console.WriteLine(
-            $"ID: {c.CharId}, Name: {c.CharName}, Level: {c.Level}, Gold: {c.Gold}, " +
-            $"Account: {c.Account?.Email}, Realm: {c.Realm?.RealmName}, Guild: {c.Guild?.GuildName}"
+            $"ID: {character.CharId}, " +
+            $"Name: {character.CharName}, " +
+            $"Level: {character.Level}, " +
+            $"Gold: {character.Gold}, " +
+            $"Account: {character.Account?.Email}, " +
+            $"Realm: {character.Realm?.RealmName}, " +
+            $"Guild: {character.Guild?.GuildName}"
         );
     }
-    Console.WriteLine();
 
-    // ITEM TYPES
-    Console.WriteLine("Item types:");
-    foreach (var t in db.ItemTypes)
-        Console.WriteLine($"ID: {t.ItemTypeID}, Name: {t.TypeName}, Max stack: {t.MaxStack}");
-    Console.WriteLine();
-
-    // ITEMS
-    Console.WriteLine("Items:");
-    foreach (var item in db.Items.Include(i => i.ItemType))
-        Console.WriteLine($"ID: {item.ItemID}, Name: {item.ItemName}, Quality: {item.Quality}, Type: {item.ItemType?.TypeName}");
-    Console.WriteLine();
-
-    //
-    // INVENTORY TYPES
-    //
-    Console.WriteLine("Inventory types:");
-    foreach (var t in db.InventoryTypes)
-        Console.WriteLine($"ID: {t.InventoryTypeID}, Name: {t.TypeName}, Slots: {t.SlotCount}");
-    Console.WriteLine();
-
-    //
-    // INVENTORY
-    //
-    Console.WriteLine("Inventory:");
-    foreach (var inv in db.Inventory
-        .Include(i => i.Character)
-        .Include(i => i.InventoryType)
-        .Include(i => i.Item)
-        .OrderBy(i => i.CharacterID).ThenBy(i => i.InventoryTypeID).ThenBy(i => i.SlotNo))
-    {
-        Console.WriteLine(
-            $"Character: {inv.Character?.CharName}, Inventory: {inv.InventoryType?.TypeName}, Slot: {inv.SlotNo}, Item: {inv.Item?.ItemName}, Amount: {inv.Amount}"
-        );
-    }
-    Console.WriteLine();
-
-    //
-    // MOUNTS
-    //
-    Console.WriteLine("Mounts:");
-    foreach (var m in db.Mounts)
-        Console.WriteLine($"ID: {m.MountID}, Name: {m.MountName}, Speed: {m.Speed}, Flying: {m.IsFlying}");
-    Console.WriteLine();
-
-    //
-    // CHARACTER_MOUNT (collected mounts)
-    //
-    Console.WriteLine("Collected mounts:");
-    foreach (var cm in db.CharacterMounts
-        .Include(cm => cm.Character)
-        .Include(cm => cm.Mount))
-    {
-        Console.WriteLine(
-            $"Character: {cm.Character?.CharName}, Mount: {cm.Mount?.MountName}, Collected: {cm.CollectedDate}"
-        );
-    }
-    Console.WriteLine();
-
-    //
-    // QUESTS
-    //
-    Console.WriteLine("Quests:");
-    foreach (var q in db.Quests)
-        Console.WriteLine($"ID: {q.QuestID}, Title: {q.Title}, XP: {q.XPReward}");
-    Console.WriteLine();
-
-    //
-    // CHARACTER_QUEST (accepted quests)
-    //
-    Console.WriteLine("Accepted quests:");
-    foreach (var cq in db.CharacterQuests
-        .Include(cq => cq.Character)
-        .Include(cq => cq.Quest))
-    {
-        Console.WriteLine(
-            $"Character: {cq.Character?.CharName}, Quest: {cq.Quest?.Title}, Completed: {cq.IsCompleted}"
-        );
-    }
-    Console.WriteLine();
-
-    //
-    // QUEST_REWARD (quest rewards items)
-    //
-    Console.WriteLine("Quest rewards:");
-    foreach (var qr in db.QuestRewards
-        .Include(qr => qr.Quest)
-        .Include(qr => qr.Item))
-    {
-        Console.WriteLine(
-            $"Quest: {qr.Quest?.Title}, Reward Item: {qr.Item?.ItemName}"
-        );
-    }
     Console.WriteLine();
 
     #region Queries written for relational algebra in the exam slides ---
-        Console.WriteLine("Rewards still waiting:");
+        Console.WriteLine("Rewards still waiting (first 20):");
         var waitingRewards =
-            from cq in db.CharacterQuests
-            join qr in db.QuestRewards on cq.QuestID equals qr.QuestID
-            where !cq.IsCompleted
-            select new { cq.Character!.CharName, qr.Item!.ItemName };
+            (from cq in db.CharacterQuests
+             join qr in db.QuestRewards on cq.QuestID equals qr.QuestID
+             where !cq.IsCompleted
+             select new { cq.Character!.CharName, qr.Item!.ItemName })
+            .Take(20);
         foreach (var r in waitingRewards)
             Console.WriteLine($"Character: {r.CharName}, Reward: {r.ItemName}");
         Console.WriteLine();
@@ -185,8 +99,7 @@ try
         foreach (var g in guildGold)
             Console.WriteLine($"Guild: {g.Guild}, Total gold: {g.TotalGold}");
         Console.WriteLine();
-    #endregion 
-        
+    #endregion
 }
 catch (Exception ex)
 {
@@ -195,3 +108,146 @@ catch (Exception ex)
 }
 
 Console.WriteLine("\nDone.");
+
+
+// ============================================================
+// LOCAL FUNCTIONS
+// ============================================================
+
+static void GenerateTestData(AppDbContext db, int characterCount)
+{
+    var random = new Random();
+
+    // ------------------------------------------------------------
+    // Generate accounts
+    // ------------------------------------------------------------
+
+    Console.WriteLine($"Generating {characterCount} accounts...");
+
+    var accounts = new List<Account>();
+
+    for (int i = 0; i < characterCount; i++)
+    {
+        accounts.Add(new Account
+        {
+            Email = $"user{i}@example.com",
+
+            // Test password hash
+            PasswordHash =
+                "$2a$11$mz5mEv/xjDRzD26vucMo4.3wDJQXRhlbeGJZdmyNokCUG9CKtwEy."
+        });
+    }
+
+    db.Accounts.AddRange(accounts);
+
+    // Save accounts first so that AccountID values are generated.
+    db.SaveChanges();
+
+    // ------------------------------------------------------------
+    // Generate characters
+    // ------------------------------------------------------------
+
+    Console.WriteLine($"Generating {characterCount} characters...");
+
+    // A guild belongs to a specific realm.
+    // Therefore, the guild must be selected from the guilds
+    // belonging to the character's selected realm.
+    var guildsByRealm = db.Guilds
+        .AsEnumerable()
+        .GroupBy(g => g.RealmID)
+        .ToDictionary(
+            g => g.Key,
+            g => g.Select(x => x.GuildID).ToList()
+        );
+
+    var characters = new List<Character>();
+
+    foreach (var account in accounts)
+    {
+        int realmId = random.Next(1, 3);
+
+        int guildId = guildsByRealm.TryGetValue(realmId, out var guildIds) && guildIds.Count > 0
+            ? guildIds[random.Next(guildIds.Count)]
+            : 0;
+
+        characters.Add(new Character
+        {
+            CharName = $"Char_{account.AccountID}",
+            Level = random.Next(1, 81),
+            Gold = random.Next(0, 10000),
+
+            AccountID = account.AccountID,
+            RealmID = realmId,
+            GuildID = guildId
+        });
+    }
+
+    db.Characters.AddRange(characters);
+
+    // Save characters first so that CharId values are generated.
+    db.SaveChanges();
+
+    // ------------------------------------------------------------
+    // Generate inventory
+    // ------------------------------------------------------------
+
+    Console.WriteLine("Generating inventory rows...");
+
+    var inventoryRows = new List<Inventory>();
+
+    foreach (var character in characters)
+    {
+        for (int slot = 1; slot <= 3; slot++)
+        {
+            inventoryRows.Add(new Inventory
+            {
+                CharacterID = character.CharId,
+                InventoryTypeID = ((slot - 1) % 3) + 1,
+                SlotNo = slot,
+                ItemID = random.Next(1, 5),
+                Amount = 1
+            });
+        }
+    }
+
+    db.Inventory.AddRange(inventoryRows);
+    db.SaveChanges();
+
+    // ------------------------------------------------------------
+    // Generate mounts and quests
+    // ------------------------------------------------------------
+
+    Console.WriteLine("Generating mounts and quests per character...");
+
+    var mounts = new List<CharacterMount>();
+    var quests = new List<CharacterQuest>();
+
+    foreach (var character in characters)
+    {
+        mounts.Add(new CharacterMount
+        {
+            CharacterID = character.CharId,
+            MountID = random.Next(1, 3),
+            CollectedDate = DateTime.UtcNow
+        });
+
+        quests.Add(new CharacterQuest
+        {
+            CharacterID = character.CharId,
+            QuestID = random.Next(1, 3),
+            IsCompleted = random.NextDouble() < 0.5
+        });
+    }
+
+    db.CharacterMounts.AddRange(mounts);
+    db.CharacterQuests.AddRange(quests);
+
+    db.SaveChanges();
+
+    Console.WriteLine(
+        $"Test data generated: " +
+        $"{accounts.Count} accounts, " +
+        $"{characters.Count} characters, " +
+        $"{inventoryRows.Count} inventory rows.\n"
+    );
+}
