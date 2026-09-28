@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Relationel_Database.Data;
 using Relationel_Database.Models;
 
@@ -43,5 +44,32 @@ public class GameServer
         });
         _db.SaveChanges();
         return true;
+    }
+
+    public bool BuyItem(int buyerId, int sellerId, int inventoryTypeId, int slotNo, int price)
+    {
+        var slot = _db.Inventory.Where(i =>
+            i.CharacterID == sellerId && i.InventoryTypeID == inventoryTypeId && i.SlotNo == slotNo);
+        var seller = _db.Characters.Where(c => c.CharId == sellerId);
+        var buyer = _db.Characters.Where(c => c.CharId == buyerId);
+
+        using var transaction = _db.Database.BeginTransaction();
+        try
+        {
+            if (slot.ExecuteUpdate(s => s.SetProperty(i => i.CharacterID, buyerId)) == 0)
+                throw new InvalidOperationException("The seller has nothing in that slot");
+
+            seller.ExecuteUpdate(s => s.SetProperty(c => c.Gold, c => c.Gold + price));
+
+            buyer.ExecuteUpdate(s => s.SetProperty(c => c.Gold, c => c.Gold - price));
+
+            transaction.Commit();
+            return true;
+        }
+        catch
+        {
+            transaction.Rollback();
+            return false;
+        }
     }
 }

@@ -27,14 +27,18 @@ try
     client.Login("mads@gmail.com", "kode1234");           // wrong password
     client.Login("mads@gmail.com", "12kode34");           // correct password
     client.CreateCharacter("MadsPaladin", realmId: 1);       // character creation; needs a login
+    
+    // Transaction
+    client.BuyItem(buyerId: 3, sellerId: 1, inventoryTypeId: 1, slotNo: 2, price: 50);
     Console.WriteLine();
 
+    // Replicaton
     Console.WriteLine("Replication:");
     using var standby = new AppDbContext("STANDBY_CONNECTION_STRING");
     Console.WriteLine("Standby has MadsPaladin: " + standby.Characters.Any(c => c.CharName == "MadsPaladin"));
     Console.WriteLine();
+    
     // --- DEVELOPER VIEW: look straight into the database ---
-
     // ACCOUNTS
     Console.WriteLine("Accounts:");
     foreach (var acc in db.Accounts)
@@ -161,6 +165,28 @@ try
     }
     Console.WriteLine();
 
+    #region Queries written for relational algebra in the exam slides ---
+        Console.WriteLine("Rewards still waiting:");
+        var waitingRewards =
+            from cq in db.CharacterQuests
+            join qr in db.QuestRewards on cq.QuestID equals qr.QuestID
+            where !cq.IsCompleted
+            select new { cq.Character!.CharName, qr.Item!.ItemName };
+        foreach (var r in waitingRewards)
+            Console.WriteLine($"Character: {r.CharName}, Reward: {r.ItemName}");
+        Console.WriteLine();
+
+        Console.WriteLine("Gold per guild:");
+        var guildGold = db.Characters
+            .Where(c => c.GuildID != null)
+            .GroupBy(c => new { c.GuildID, c.Guild!.GuildName })
+            .Select(g => new { Guild = g.Key.GuildName, TotalGold = g.Sum(c => c.Gold) })
+            .Where(g => g.TotalGold > 200);
+        foreach (var g in guildGold)
+            Console.WriteLine($"Guild: {g.Guild}, Total gold: {g.TotalGold}");
+        Console.WriteLine();
+    #endregion 
+        
 }
 catch (Exception ex)
 {

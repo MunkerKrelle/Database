@@ -32,4 +32,10 @@ public class GameClient
         bool created = _server.CreateCharacter(_accountId.Value, name, realmId);
         Console.WriteLine(created ? $"Created character {name}" : $"The name {name} is already taken on this realm");
     }
+
+    public void BuyItem(int buyerId, int sellerId, int inventoryTypeId, int slotNo, int price)
+    {
+        bool bought = _server.BuyItem(buyerId, sellerId, inventoryTypeId, slotNo, price);
+        Console.WriteLine(bought ? "Trade saved (COMMIT)" : "Trade failed, nothing was saved (ROLLBACK)");
+    }
 }
